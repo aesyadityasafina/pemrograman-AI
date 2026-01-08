@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI English Tutor (Mode Pelatihan Penuh)</title>
+    <style>
+        /* Gaya CSS untuk tampilan chat yang modern */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .chat-container {
+            width: 100%;
+            max-width: 600px;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            height: 85vh;
+        }
+        .chat-header {
+            background-color: #17A2B8; /* Warna Cyan */
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-size: 1.2em;
+            font-weight: 600;
+        }
+        .chat-box {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .message-bubble {
+            max-width: 85%;
+            padding: 10px 15px;
+            border-radius: 20px;
+            line-height: 1.5;
+            word-wrap: break-word;
+        }
+        .user-message {
+            align-self: flex-end;
+            background-color: #DCF8C6; 
+            border-bottom-right-radius: 5px;
+        }
+        .ai-message {
+            align-self: flex-start;
+            background-color: #ECEFF1;
+            border-bottom-left-radius: 5px;
+        }
+        .ai-message strong {
+            color: #4CAF50; /* Warna hijau untuk koreksi */
+            display: block;
+            margin-top: 5px;
+        }
+        .ai-message .original-text {
+            font-style: italic;
+            color: #555;
+            font-size: 0.9em;
+            margin-bottom: 3px;
+        }
+        .ai-message .translation-text {
+            color: #008CBA; /* Warna Biru untuk Terjemahan Kalimat */
+            font-weight: 500;
+        }
+        .ai-message .explanation-text {
+            color: #CC0000; /* Warna Merah untuk Penjelasan Kesalahan */
+            font-weight: 500;
+        }
+        .ai-message .response-text {
+            color: #212529; /* Warna Gelap untuk respons dialog Inggris */
+            font-weight: 500;
+            font-style: italic;
+        }
+        .correction-info {
+            font-size: 0.95em;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px dashed #ccc;
+        }
+        .controls {
+            padding: 15px;
+            border-top: 1px solid #ddd;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #recordButton {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.1s;
+        }
+        #recordButton:hover {
+            background-color: #0056b3;
+        }
+        #recordButton:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #recordButton.recording {
+            background-color: #ff4c4c; 
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        #status {
+            margin-left: 15px;
+            color: #555;
+            font-style: italic;
+        }
+        .error-message {
+            color: red;
+            font-weight: bold;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="chat-container">
+        <div class="chat-header">
+            🗣️ AI English Tutor (Mode Pelatihan Penuh)
+        </div>
+        <div class="chat-box" id="chatBox">
+            <div class="message-bubble ai-message">
+                Halo! Saya adalah Tutor Bahasa Inggrismu. Tekan "Mulai Rekam" dan ucapkan satu kalimat dalam Bahasa Inggris. Saya akan memberikan koreksi lengkap, penjelasan edukatif, dan respon dialog dalam Bahasa Inggris (dengan terjemahan) untuk Anda praktik!
+            </div>
+        </div>
+        <div class="controls">
+            <button id="recordButton">Mulai Rekam</button>
+            <p id="status">Siap...</p>
+        </div>
+    </div>
+
+    <script>
+        const recordButton = document.getElementById('recordButton');
+        const statusElement = document.getElementById('status');
+        const chatBox = document.getElementById('chatBox');
+        let recognition;
+        let isRecording = false;
+
+        // Cek dukungan Speech Recognition
+        if (!('webkitSpeechRecognition' in window)) {
+            statusElement.textContent = 'Error: Browser Anda tidak mendukung Web Speech API.';
+            recordButton.disabled = true;
+        } else {
+            // Inisialisasi Speech Recognition
+            recognition = new webkitSpeechRecognition();
+            recognition.continuous = false; 
+            recognition.interimResults = false; 
+            recognition.lang = 'en-US'; // Target bahasa: English
+
+            // --- EVENT HANDLERS ---
+
+            recognition.onstart = () => {
+                isRecording = true;
+                recordButton.classList.add('recording');
+                recordButton.textContent = 'Merekam... Tekan untuk Berhenti.';
+                statusElement.textContent = 'Mendengarkan ucapan Anda...';
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                statusElement.textContent = `Teks Diterima: "${transcript}"`;
+                
+                appendMessage('user', transcript);
+                
+                sendToServer(transcript);
+            };
+
+            recognition.onend = () => {
+                isRecording = false;
+                recordButton.classList.remove('recording');
+                recordButton.textContent = 'Mulai Rekam';
+                if (statusElement.textContent.includes('Mendengarkan')) {
+                     statusElement.textContent = 'Memproses...'; 
+                }
+            };
+
+            recognition.onerror = (event) => {
+                isRecording = false;
+                recordButton.classList.remove('recording');
+                recordButton.textContent = 'Mulai Rekam';
+                if (event.error !== 'no-speech') {
+                    statusElement.textContent = `Error: ${event.error}`;
+                    appendMessage('ai', { error: `Terjadi kesalahan pada Pengenalan Suara: ${event.error}` });
+                } else {
+                    statusElement.textContent = 'Tidak ada ucapan terdeteksi. Silakan coba lagi.';
+                }
+            };
+
+            // --- FUNGSI UTAMA ---
+
+            recordButton.onclick = () => {
+                if (isRecording) {
+                    recognition.stop();
+                } else {
+                    recognition.start();
+                }
+            };
+        }
+
+        function appendMessage(sender, content) {
+            const bubble = document.createElement('div');
+            bubble.classList.add('message-bubble');
+
+            if (sender === 'user') {
+                bubble.classList.add('user-message');
+                bubble.innerHTML = `Anda Berkata: <strong>${content}</strong>`;
+            } else if (sender === 'ai') {
+                bubble.classList.add('ai-message');
+                
+                if (content.error) {
+                    bubble.classList.add('error-message');
+                    bubble.textContent = `[KESALAHAN SISTEM]: ${content.error}`;
+                } else {
+                    // Tampilkan output terstruktur DENGAN 6 KUNCI LENGKAP
+                    bubble.innerHTML = `
+                        <div class="original-text">Kalimat Asli: ${content.original}</div>
+                        <div class="correction-info">
+                            <strong>Kalimat Dikoreksi:</strong> ${content.corrected}
+                            <br>
+                            <strong>Terjemahan Kalimat Benar :</strong> <span class="translation-text">${content.translation_id}</span>
+                            <br>
+                            <hr style="border-top: 1px dotted #ccc; margin: 5px 0;">
+                            <strong>Penjelasan Kesalahan :</strong> <span class="explanation-text">${content.explanation}</span>
+                            <br><br>
+                            <strong>Tutor Response :</strong> <span class="response-text">${content.response}</span>
+                            <br>
+                            <span style="font-size: 0.8em; color: gray;">(Terjemahan Respons: ${content.response_translation_id})</span>
+                        </div>
+                    `;
+                }
+            }
+            
+            chatBox.appendChild(bubble);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        async function sendToServer(text) {
+            try {
+                recordButton.disabled = true; 
+                statusElement.textContent = 'Mengirim ke AI... Mohon Tunggu.';
+
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: text })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    appendMessage('ai', data);
+                    statusElement.textContent = 'Siap... Lanjutkan bicara.';
+                } else {
+                    appendMessage('ai', { error: data.error || 'Terjadi kesalahan saat berkomunikasi dengan server.' });
+                    statusElement.textContent = 'Terjadi Kesalahan.';
+                }
+
+            } catch (error) {
+                console.error('Fetch Error:', error);
+                appendMessage('ai', { error: `Gagal terhubung ke server (Flask). Pastikan server Anda berjalan di http://127.0.0.1:5000.` });
+                statusElement.textContent = 'Kesalahan Koneksi.';
+            } finally {
+                recordButton.disabled = false; 
+            }
+        }
+    </script>
+</body>
+</html>
